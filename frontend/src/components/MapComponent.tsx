@@ -1,49 +1,59 @@
 "use client";
 
-import { useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, CircleMarker } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, Tooltip } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
-
-// Fix for default marker icons in Leaflet with Next.js
-const icon = L.icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-});
 
 export default function MapComponent({ outages }: { outages: any[] }) {
+  // Phase 8: Using Zip Code Centroids handled by the backend pgeocode engine.
+  // We completely bypass forcing the browser to download massive GeoJSON borders!
+  
   return (
-    <MapContainer center={[39.8283, -98.5795]} zoom={4} style={{ height: '100%', width: '100%' }}>
-      {/* Premium dark mode tile layer */}
+    <MapContainer center={[38.0, -97.0]} zoom={5} style={{ height: '100%', width: '100%' }}>
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
       />
+      
       {outages.map((outage) => (
-        <CircleMarker
-          key={outage.id}
-          center={
-            outage.lat && outage.lon 
-              ? [outage.lat, outage.lon] 
-              // Fallback mockup coordinates for our seeded DB items
-              : outage.utility_name.includes('FirstEnergy') ? [40.4406, -79.9959] : [29.7604, -95.3698]
-          }
-          pathOptions={{ color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.6, weight: 2 }}
-          radius={Math.max(12, Math.min(outage.customers_out / 500, 45))}
-        >
-          <Popup>
-            <div className="text-gray-900 font-sans p-1">
-              <h3 className="font-bold text-lg mb-1 leading-tight">{outage.utility_name}</h3>
-              <p className="text-xs text-gray-500 mb-2">State: {outage.state}</p>
-              <div className="bg-red-100 text-red-700 px-3 py-1 rounded-md inline-block font-bold">
-                {outage.customers_out.toLocaleString()} Customers Out
-              </div>
-            </div>
-          </Popup>
-        </CircleMarker>
+        // Only trigger rendering if the Python backend successfully calculated the Zip Centroid
+        outage.lat && outage.lon ? (
+          <CircleMarker
+            key={outage.zip_code || `${outage.lat}-${outage.lon}`}
+            center={[outage.lat, outage.lon]}
+            radius={10 + Math.min(outage.customers_out / 800, 25)}
+            pathOptions={{
+              fillColor: '#ef4444', 
+              color: '#7f1d1d',     
+              weight: 2,
+              fillOpacity: 0.5 + Math.min(outage.customers_out / 15000, 0.4)
+            }}
+          >
+            <Tooltip 
+              direction="top"
+              className="custom-tooltip"
+            >
+               <div style={{ fontFamily: 'sans-serif', padding: '4px' }}>
+                 <span style={{ fontWeight: 'bold', fontSize: '16px', color: '#111827' }}>
+                   ZIP Code: {outage.zip_code}
+                 </span><br/>
+                 <span style={{ color: '#4B5563', fontSize: '13px' }}>
+                   {outage.utility_name} ({outage.state})
+                 </span><br/>
+                 <div style={{ 
+                   marginTop: '6px', 
+                   backgroundColor: '#FEE2E2', 
+                   color: '#B91C1C', 
+                   padding: '4px 8px', 
+                   borderRadius: '4px', 
+                   fontWeight: 'bold', 
+                   display: 'inline-block' 
+                 }}>
+                   {outage.customers_out.toLocaleString()} Customers Out
+                 </div>
+               </div>
+            </Tooltip>
+          </CircleMarker>
+        ) : null
       ))}
     </MapContainer>
   );
