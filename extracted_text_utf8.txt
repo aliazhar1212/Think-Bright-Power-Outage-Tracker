@@ -1,0 +1,111 @@
+﻿Tab 1
+You are absolutely right to assume there is a method to the madness, but here is the big secret of the power outage tracking world: BlueFire Studios (PowerOutage.us) does not have a proprietary or secret backdoor to grid data.
+They built their massive aggregator the hard way—by painstakingly finding, reverse-engineering, and writing web scrapers for the publicly available data feeds of thousands of individual utility websites.
+However, if you want to build your own resource database and explore what's possible, you don't actually need to write 3,000 different, custom web scrapers. The vast majority of utilities do not build their own outage maps; they buy off-the-shelf mapping software from a handful of enterprise vendors. If you figure out how the data is structured for these 3 or 4 vendors, you can easily pull data for 80% of the U.S. power grid using the exact same code structure.
+Here is the blueprint for where the data lives, who provides it, and a starter database of the underlying sources so you can explore what is possible.
+1. The "Secret Sauce": The Mapping Software Vendors
+If you look at the backend network traffic of public utility maps, they aren't loading images; they are quietly pulling raw geoJSON or XML data files from these primary software providers:
+KUBRA (Storm Center): This is the undisputed king of outage maps. They provide the software for many of the biggest Investor-Owned Utilities (IOUs) in the country (Duke Energy, FirstEnergy, ConEdison, Oncor).
+How it works: KUBRA maps run heavily on the client side. If you monitor your browser's network traffic on a KUBRA map, you will find periodic requests fetching files like summary.json or outages.json containing exact coordinates, polygon shapes, and customer outage counts.
+iFactor (now part of KUBRA): Another massive player heavily used for utility mobile apps and interactive web maps (like Southern Company).
+Milsoft Utility Solutions: While KUBRA handles the massive multi-state grids, Milsoft is used by hundreds of smaller municipal utilities and rural electric cooperatives (Co-ops) across the U.S. Their "Web Outage Viewer" endpoints usually return highly standardized XML or JSON data.
+Esri (ArcGIS Dashboards): Many city-owned municipal utilities and custom maps use Esri's ArcGIS platform. You can query their maps using standard Esri REST API calls to get live GeoJSON data of the active outage polygons.
+2. The Starter Database: Major U.S. Utility Sources
+To get the most coverage of the U.S. population quickly, you want to focus on the largest holding companies. Here are the direct public mapping sources for some of the largest electric utilities (and the vendor architecture they typically use):
+Texas & The South
+CenterPoint Energy (Houston area): CenterPoint Outage Tracker (Custom cloud-based Esri/ArcGIS tracker)
+Oncor (Dallas/North Texas): Oncor Storm Center (KUBRA)
+Entergy (TX, LA, AR, MS): Entergy Outage Map (Esri/ArcGIS)
+Florida Power & Light (FPL): FPL Power Tracker (iFactor/KUBRA)
+Duke Energy (NC, SC, FL, IN, OH, KY): Duke Outage Map (KUBRA)
+West Coast
+Pacific Gas & Electric (PG&E - CA): PG&E Outage Center (KUBRA)
+Southern California Edison (SCE - CA): SCE Outage Map
+Northeast & Midwest
+Con Edison (New York): ConEd Outage Map (KUBRA)
+Eversource (New England): Eversource Outage Map (KUBRA)
+FirstEnergy (PA, OH, NJ, WV, MD): FirstEnergy Storm Center (KUBRA)
+Exelon (ComEd in IL, PECO in PA, BGE in MD): ComEd Outage Map (KUBRA)
+3. How to Build the Master List (Don't start from scratch!)
+If you want to build a master database of all 3,000+ utilities down to the smallest cooperatives, several government and open-source groups have already done the heavy lifting of cataloging the companies and URLs:
+The Master Roster (EIA-861): The U.S. Energy Information Administration (EIA) mandates that every utility provider in the country fill out form EIA-861. You can download this public database to get a master CSV of every single entity that sells electricity in the US, along with their state and total customer counts.
+The Department of Energy (DOE) & OpenEI: Following a "White House Mapathon," the government released the Utility Outage Information dataset. It is a downloadable CSV containing the EIA Utility ID, company name, and the direct URL to the outage map for hundreds of utilities. You can search for this on the Open Energy Data Initiative (OEDI).
+GitHub Repositories: There is a vibrant open-source civic tech community reverse-engineering these maps. If you search GitHub for terms like kubra scraper, power outage map geojson, or energy-outage, you will find pre-built Python scripts (e.g., the open-austin/energy-outage project) that already have lists of API endpoints ready to go.
+4. Exploring What's Possible (How to extract the data yourself right now)
+If you want to see exactly how an aggregator gets the data for a specific utility, you can bypass the visual map and find the raw API endpoint in your web browser in about 30 seconds:
+Go to any of the KUBRA map URLs listed above (e.g., Duke Energy or Oncor).
+Right-click anywhere on the page and click Inspect (to open your browser's Developer Tools).
+Click on the Network tab at the top of the dev tools panel.
+Refresh the page.
+In the filter box in the Network tab, type .json or click the Fetch/XHR filter button.
+You will see background files loading as the map renders (often called summary.json, metadata, or directory numbers).
+Click on one and look at the Response or Preview tab. You will see beautifully structured JSON code listing exactly how many customers are out, the estimated restoration time, and the GPS coordinates of the outage.
+What is possible now?
+Once you isolate that specific .json URL (or an ArcGIS FeatureServer URL), you don't need to load the heavy visual map in a browser anymore. You can write a simple Python script (using the requests library) to ping that hidden URL every 10 minutes, parse the JSON, and save the numbers into your own database.
+If you compile a list of those raw JSON endpoints for the top 50 utilities in the U.S., you will have successfully bypassed the visual maps and built your own foundational backend for a national live outage tracker.
+Tab 2
+If you are ready to move past the visual maps and start handling the raw .json and .xml feeds, you are transitioning from "viewing" the data to ingesting and standardizing it.
+Because the utility mapping industry is dominated by three main software vendors (KUBRA, Esri, and Milsoft), you do not need to write 3,000 different web scrapers. You only need to build three core extraction methods.
+Here are the exact next steps, the URL structures to hunt for, and the starter blueprints to extract the feeds for each architecture to build your database.
+Step 1: The Detective Work (Finding the Endpoints)
+For any utility you want to add to your database, your first step is always the same:
+ * Open the utility's public outage map in Google Chrome.
+ * Press F12 to open Developer Tools and click the Network tab.
+ * Click the Fetch/XHR filter (this hides the images and formatting, showing only the raw data flows).
+ * Refresh the page and watch the files load.
+Step 2: Extracting the Data (Vendor-Specific Steps)
+Depending on what you see in the Network tab, you will apply one of these three methods:
+Method A: The KUBRA Architecture (The Two-Step JSON)
+(Used by: Duke Energy, PG&E, Oncor, FirstEnergy, ConEdison, Eversource)
+KUBRA maps are built to survive hurricanes, meaning millions of people refreshing the page at once. To prevent server crashes, they don't use a live database query. Instead, every 10 to 15 minutes, their servers generate a static .json file and drop it into a hidden, timestamped folder. Extracting it requires two steps:
+ * Next Step 1 (Find the Folder): Look in the Network tab for a file called metadata.json, config.json, or a URL containing currentState. If you open this tiny JSON file, it will reveal the name of the folder currently holding the live data (e.g., {"directory": "data_2026_02_26_14_30_05"}).
+ * Next Step 2 (Pull the Data): Now, inject that folder name into the URL to grab the actual data files.
+   * To get county/zip code totals: .../data/outages/{directory}/summary.json
+   * To get exact GPS outage clusters: .../data/outages/{directory}/outages.json
+Starter Python Logic:
+import requests
+# 1. Ping the metadata to find where the live data lives right now
+metadata_url = "https://outages.firstenergycorp.com/data/outages/metadata.json"
+folder_name = requests.get(metadata_url).json()['directory']
+# 2. Build the URL for the actual data using that folder name
+summary_url = f"https://outages.firstenergycorp.com/data/outages/{folder_name}/summary.json"
+# 3. Download the live outage stats
+live_data = requests.get(summary_url).json()
+Method B: The Esri / ArcGIS Architecture (The GeoJSON Query)
+(Used by: CenterPoint, Entergy, Florida Power & Light, and many city grids)
+Esri maps are the easiest to work with. They act as a live, queryable spatial database.
+ * Next Step (The Query): Look in the Network tab for a URL ending in /MapServer/0/query or /FeatureServer/0/query. You can bypass the map entirely by appending SQL-style parameters to the end of that URL to force the server to hand you everything in clean JSON format.
+   * where=1=1 (Tells the server: "Return all active records")
+   * outFields=* (Tells the server: "Give me all data columns, like estimated repair times")
+   * f=geojson (Formats the output perfectly for mapping)
+Starter Python Logic:
+import requests
+# The ArcGIS endpoint you found in the Network tab
+arcgis_url = "https://gis.centerpointenergy.com/ArcGIS/rest/services/Outage/OUTAGE_TRACKER_OEP/MapServer/0/query"
+# Ask the server for everything
+params = {
+    'where': '1=1',             
+    'outFields': '*',           
+    'f': 'geojson'                 
+}
+live_data = requests.get(arcgis_url, params=params).json()
+Method C: The Milsoft Architecture (XML/JSON)
+(Used by: Hundreds of smaller Rural Electric Cooperatives)
+Milsoft systems are straightforward.
+ * Next Step: Look for an endpoint ending in /WebOutageViewer/OutageStatus.xml or /api/outageSummary. You simply point a Python script at that URL and parse the tags (like <CustomerCount> or <Outages>).
+Step 3: Building Your Resources Database
+As you hunt down these feeds, do not just save the URLs; build a structured tracking database (a spreadsheet or SQL table) to act as the "engine" for your future application. Your database should have these columns:
+ * Utility Name (e.g., Duke Energy Carolinas)
+ * State (e.g., NC)
+ * Vendor Architecture (e.g., KUBRA)
+ * Base URL / Metadata URL (The API endpoint you found)
+ * Data Mapping Keys: (This is crucial. Duke might call a blackout cust_a, while Entergy calls it CustomersOut. You need to map these to your own standardized column, like total_out, so your final dataset is uniform).
+The Ultimate Shortcut:
+Do not hunt for all 3,000 URLs manually. The open-source civic tech community has already reverse-engineered hundreds of these. Go to GitHub and search for repositories like GateHouseMedia/power-outages or open-austin/energy-outage. You can copy their massive lists of KUBRA Instance IDs and Esri endpoints directly into your database.
+Step 4: Exploring What's Possible
+Utility maps only show the present moment. Once a truck fixes the power line, the outage vanishes from the .json feed forever.
+If you take the Python scripts above and set them up on a cron job (a task scheduler) to run every 15 minutes, downloading and saving the JSON to a database, you immediately possess something highly valuable: A permanent historical record of grid reliability.
+With that data, you can build:
+ * True "Time-to-Restore" Dashboards: Track exactly how many hours it takes utilities to fix blackouts in specific zip codes.
+ * Grid Equity Analysis: Cross-reference your outage history with U.S. Census income data to see if wealthier neighborhoods get their power restored faster than lower-income areas.
+ * Custom SMS Alerts: Build an app where users input their zip code, and your system texts them the exact moment the utility's JSON feed updates their Estimated_Restoration_Time.
